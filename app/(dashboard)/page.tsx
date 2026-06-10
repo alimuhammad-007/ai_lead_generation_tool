@@ -1,26 +1,50 @@
 import Link from "next/link";
-import { createAdminClient } from "@/lib/supabase";
+import { redirect } from "next/navigation";
+import { createServerSupabaseClient } from "@/lib/supabase-server";
 import { LeadsChart, type ChartDataPoint } from "@/components/LeadsChart";
+import { AlertBanner } from "@/components/AlertBanner";
 
 export const dynamic = "force-dynamic";
 
 // ── Page ──────────────────────────────────────────────────────────────────────
 
 export default async function DashboardPage() {
-  const supabase = createAdminClient();
+  const supabase = createServerSupabaseClient();
 
-  const thirtyDaysAgo  = new Date(Date.now() - 30 * 86_400_000).toISOString();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) redirect("/login");
 
-  const [leadsRes, emailsRes, chartLeadsRes, clientsRes] = await Promise.all([
-    supabase.from("leads").select("id, status, name, company, score, created_at"),
-    supabase.from("outreach_emails").select("id, status"),
-    supabase.from("leads").select("created_at").gte("created_at", thirtyDaysAgo).order("created_at", { ascending: true }),
-    supabase.from("clients").select("id, plan"),
+  const thirtyDaysAgo   = new Date(Date.now() - 30 * 86_400_000).toISOString();
+  const twentyFourHrsAgo = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
+
+  const [leadsRes, emailsRes, chartLeadsRes, hotAlertRes] = await Promise.all([
+    supabase
+      .from("leads")
+      .select("id, status, name, company, score, created_at")
+      .eq("user_id", user.id),
+    supabase
+      .from("outreach_emails")
+      .select("id, status")
+      .eq("user_id", user.id),
+    supabase
+      .from("leads")
+      .select("created_at")
+      .eq("user_id", user.id)
+      .gte("created_at", thirtyDaysAgo)
+      .order("created_at", { ascending: true }),
+    // Hot leads from last 24 hours that haven't been alerted yet
+    supabase
+      .from("leads")
+      .select("id, name, company")
+      .eq("user_id", user.id)
+      .eq("status", "hot")
+      .gte("created_at", twentyFourHrsAgo)
+      .is("alerted_at", null),
   ]);
 
-  const leads   = leadsRes.data   ?? [];
-  const emails  = emailsRes.data  ?? [];
-  const clients = clientsRes.data ?? [];
+  const leads      = leadsRes.data     ?? [];
+  const emails     = emailsRes.data    ?? [];
+  const hotAlerts  = hotAlertRes.data  ?? [];
 
   const totalLeads = leads.length;
   const hotLeads   = leads.filter((l) => l.status === "hot").length;
@@ -62,6 +86,13 @@ export default async function DashboardPage() {
 
   return (
     <main className="min-h-screen p-6 lg:p-8">
+
+      {/* ── Hot lead alert banner ── */}
+      <AlertBanner
+        count={hotAlerts.length}
+        leads={hotAlerts as Array<{ id: string; name: string; company: string | null }>}
+      />
+
       {/* ── Page header ── */}
       <div className="mb-8 flex flex-wrap items-center justify-between gap-4">
         <div>
@@ -157,30 +188,13 @@ export default async function DashboardPage() {
           <LeadsChart data={chartData} />
         </div>
 
-        {/* Pipeline + clients */}
-        <div className="flex flex-col gap-5">
-          <div className="flex-1 rounded-2xl border border-slate-100 bg-white p-5 shadow-sm">
-            <h3 className="mb-4 text-sm font-semibold text-slate-900">Lead Pipeline</h3>
-            <div className="space-y-4">
-              <PipelineBar label="Hot"  count={hotLeads}  total={totalLeads} barCls="bg-rose-500"  dotCls="bg-rose-500"  />
-              <PipelineBar label="Warm" count={warmLeads} total={totalLeads} barCls="bg-amber-400" dotCls="bg-amber-400" />
-              <PipelineBar label="Cold" count={coldLeads} total={totalLeads} barCls="bg-blue-400"  dotCls="bg-blue-400"  />
-            </div>
-          </div>
-
-          <div className="rounded-2xl border border-slate-100 bg-white p-5 shadow-sm">
-            <div className="mb-3 flex items-center justify-between">
-              <h3 className="text-sm font-semibold text-slate-900">Clients</h3>
-              <Link href="/clients" className="text-xs font-medium text-indigo-600 hover:text-indigo-700">
-                View all →
-              </Link>
-            </div>
-            <div className="grid grid-cols-2 gap-3">
-              <MiniStat label="Total"   value={clients.length}                                     />
-              <MiniStat label="Paid"    value={clients.filter((c) => c.plan !== "free").length}    />
-              <MiniStat label="Starter" value={clients.filter((c) => c.plan === "starter").length} />
-              <MiniStat label="Pro"     value={clients.filter((c) => c.plan === "pro").length}     />
-            </div>
+        {/* Pipeline */}
+        <div className="rounded-2xl border border-slate-100 bg-white p-5 shadow-sm">
+          <h3 className="mb-4 text-sm font-semibold text-slate-900">Lead Pipeline</h3>
+          <div className="space-y-4">
+            <PipelineBar label="Hot"  count={hotLeads}  total={totalLeads} barCls="bg-rose-500"  dotCls="bg-rose-500"  />
+            <PipelineBar label="Warm" count={warmLeads} total={totalLeads} barCls="bg-amber-400" dotCls="bg-amber-400" />
+            <PipelineBar label="Cold" count={coldLeads} total={totalLeads} barCls="bg-blue-400"  dotCls="bg-blue-400"  />
           </div>
         </div>
       </div>
@@ -318,15 +332,6 @@ function PipelineBar({
       <div className="h-1.5 w-full overflow-hidden rounded-full bg-slate-100">
         <div className={`h-full rounded-full ${barCls} transition-all duration-500`} style={{ width: `${pct}%` }} />
       </div>
-    </div>
-  );
-}
-
-function MiniStat({ label, value }: { label: string; value: number }) {
-  return (
-    <div className="rounded-xl bg-slate-50 px-3 py-2.5">
-      <p className="text-lg font-bold tabular-nums text-slate-900">{value}</p>
-      <p className="text-[11px] text-slate-500">{label}</p>
     </div>
   );
 }

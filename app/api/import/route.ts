@@ -8,6 +8,7 @@ interface LeadInput {
   company?:      string;
   title?:        string;
   linkedin_url?: string | null;
+  phone?:        string | null;
 }
 
 const MAX_BATCH = 1000;
@@ -81,6 +82,7 @@ export async function POST(req: NextRequest) {
       company:      l.company?.trim()             || null,
       title:        l.title?.trim()               || null,
       linkedin_url: l.linkedin_url?.trim()        || null,
+      phone:        l.phone?.trim()               || null,
       score:        0,
       status:       "unscored" as const,
     };

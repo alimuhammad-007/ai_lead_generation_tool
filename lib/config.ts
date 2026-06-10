@@ -4,37 +4,51 @@ export const CLIENT_CONFIG = {
   primaryColor:   "#6366f1",
   logoLetter:     "A",
   industry:       "general",
-  currency:       "USD",
+  supportEmail:   "support@apexleadgen.com",
 
-  pricingPlans: {
-    starter: {
-      name:  "Starter",
-      price: 299,
-      type:  "one-time" as const,
+  // ── ICP Criteria ────────────────────────────────────────────────────────────
+  icpCriteria: {
+    targetIndustries: ["SaaS", "Tech", "Real Estate", "Healthcare"],
+    targetTitles:     ["CEO", "Founder", "CTO", "Director", "Manager"],
+    targetCompanySize: "1-200",
+    targetLocation:    "any",
+  },
+
+  // ── Pricing tiers (used by proposal generator) ──────────────────────────────
+  pricingTiers: [
+    {
+      name:    "Starter",
+      price:   "$997/mo",
       features: [
-        "Up to 500 leads",
-        "AI lead scoring",
-        "Email outreach",
-        "CSV import",
+        "Up to 500 AI-scored leads/month",
+        "Automated email outreach (3-step sequence)",
+        "Google Maps + LinkedIn prospecting",
+        "Basic CRM export (CSV)",
         "Email support",
       ],
     },
-    pro: {
-      name:  "Pro",
-      price: 499,
-      type:  "one-time" as const,
+    {
+      name:    "Growth",
+      price:   "$2,497/mo",
       features: [
-        "Unlimited leads",
-        "Advanced AI scoring",
-        "Email sequences",
-        "Multi-client management",
-        "White-label branding",
+        "Up to 2,000 AI-scored leads/month",
+        "Full follow-up sequence automation (14-day)",
+        "Lead research & company intelligence",
+        "ICP matching & prioritization",
+        "CRM integration (HubSpot, Salesforce)",
         "Priority support",
       ],
     },
-  },
-
-  supportEmail: "support@apexleadgen.com",
+    {
+      name:    "Enterprise",
+      price:   "Custom",
+      features: [
+        "Unlimited leads & sequences",
+        "Custom AI models & ICP tuning",
+        "White-label dashboard",
+        "Dedicated account manager",
+        "SLA & custom integrations",
+      ],
+    },
+  ],
 } as const;
-
-export type PricingPlanKey = keyof typeof CLIENT_CONFIG.pricingPlans;

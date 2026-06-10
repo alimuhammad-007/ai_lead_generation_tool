@@ -1,4 +1,14 @@
 export type LeadStatus = "hot" | "warm" | "cold" | "unscored";
+export type IcpMatch   = "perfect" | "good" | "poor";
+
+export type LeadResearch = {
+  company_summary:     string;
+  recent_news:         string;
+  pain_points:         string;
+  talking_points:      string[];
+  best_outreach_angle: string;
+  researched_at:       string;
+};
 
 export type Lead = {
   id: string;
@@ -8,11 +18,15 @@ export type Lead = {
   company: string | null;
   title: string | null;
   linkedin_url: string | null;
+  phone: string | null;
   score: number;
   score_reason: string | null;
   status: LeadStatus;
   client_id: string | null;
   created_at: string;
+  research: LeadResearch | null;
+  icp_score: number | null;
+  alerted_at: string | null;
 };
 
 export type OutreachEmailStatus = "scheduled" | "sent" | "opened" | "replied" | "failed";
@@ -28,7 +42,7 @@ export type OutreachEmail = {
   user_id: string;
   lead_id: string;
   campaign_id: string | null;
-  sequence_day: 1 | 3 | 7 | null;
+  sequence_day: number | null;
   subject: string;
   body: string;
   html: string;
@@ -60,10 +74,14 @@ export type Database = {
     Tables: {
       leads: {
         Row: Lead;
-        Insert: Omit<Lead, "id" | "created_at" | "score_reason" | "client_id"> & {
+        Insert: Omit<Lead, "id" | "created_at" | "score_reason" | "client_id" | "phone" | "research" | "icp_score" | "alerted_at"> & {
           score_reason?: string | null;
-          client_id?: string | null;
-          email?: string | null;
+          client_id?:   string | null;
+          email?:       string | null;
+          phone?:       string | null;
+          research?:    LeadResearch | null;
+          icp_score?:   number | null;
+          alerted_at?:  string | null;
         };
         Update: Partial<Omit<Lead, "id" | "created_at">>;
         Relationships: [
@@ -78,7 +96,7 @@ export type Database = {
       clients: {
         Row: Client;
         Insert: Omit<Client, "id" | "created_at" | "stripe_customer_id" | "stripe_subscription_id"> & {
-          stripe_customer_id?: string | null;
+          stripe_customer_id?:  string | null;
           stripe_subscription_id?: string | null;
         };
         Update: Partial<Omit<Client, "id" | "created_at">>;
@@ -93,10 +111,10 @@ export type Database = {
       outreach_emails: {
         Row: OutreachEmail;
         Insert: Omit<OutreachEmail, "id" | "created_at" | "sent_at" | "opened_at"> & {
-          id?: string;
+          id?:         string;
           created_at?: string;
-          sent_at?: string | null;
-          opened_at?: string | null;
+          sent_at?:    string | null;
+          opened_at?:  string | null;
         };
         Update: Partial<Omit<OutreachEmail, "id" | "created_at">>;
         Relationships: [

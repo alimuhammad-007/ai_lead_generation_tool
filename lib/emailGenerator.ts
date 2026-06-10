@@ -1,37 +1,52 @@
 import { groq } from "@/lib/groq";
 
-export type EmailTone = "professional" | "friendly" | "direct";
+export type EmailTone  = "professional" | "friendly" | "direct";
+export type EmailAngle = "introduction" | "value_proposition" | "social_proof" | "breakup";
 
-export type GeneratedEmail = {
-  subject: string;
-  body: string;
-};
+export type GeneratedEmail = { subject: string; body: string };
 
 export type EmailGenInput = {
-  name: string;
-  company: string;
-  title: string;
-  sequenceDay?: 1 | 3 | 7;
-  tone?: EmailTone;
+  name:         string;
+  company:      string;
+  title:        string;
+  sequenceDay?: number;
+  tone?:        EmailTone;
+  angle?:       EmailAngle;
 };
 
 const TONE_DESC: Record<EmailTone, string> = {
   professional: "formal and professional, suitable for enterprise outreach",
-  friendly: "warm and conversational, like reaching out to a peer",
-  direct: "concise and value-focused, respecting the recipient's time",
+  friendly:     "warm and conversational, like reaching out to a peer",
+  direct:       "concise and value-focused, respecting the recipient's time",
+};
+
+const ANGLE_NOTE: Record<EmailAngle, string> = {
+  introduction:
+    "This is the FIRST email. Introduce yourself briefly, show genuine understanding of their world, and end with a soft low-pressure ask. Never say 'I hope this email finds you well'.",
+  value_proposition:
+    "This is a FOLLOW-UP email. Lead with a specific value proposition or ROI insight directly relevant to their role. Acknowledge you haven't heard back — one sentence max. Keep it shorter than the first email.",
+  social_proof:
+    "This is a LATER follow-up. Include one concrete case study or social proof example relevant to their industry (e.g., 'We helped a similar company achieve X in Y weeks'). One example only, then a soft CTA.",
+  breakup:
+    "This is the FINAL email. Keep it under 4 sentences. Acknowledge they've been busy. Make it genuinely easy to say no — give them an out. Leave the door open warmly but don't oversell.",
 };
 
 function buildPrompt(input: EmailGenInput): string {
-  const tone = input.tone ?? "professional";
-  const day = input.sequenceDay ?? 1;
+  const tone  = input.tone ?? "professional";
+  const angle = input.angle;
+  const day   = input.sequenceDay ?? 1;
 
-  let sequenceNote = "";
-  if (day === 3) {
+  let sequenceNote: string;
+  if (angle) {
+    sequenceNote = `\n\n${ANGLE_NOTE[angle]}`;
+  } else if (day === 3) {
     sequenceNote =
-      "\nThis is follow-up email #2 sent 2 days after the first. Briefly acknowledge you haven't heard back, offer a new value angle, and keep it shorter than the original.";
+      "\n\nThis is follow-up #2 (day 3). Briefly acknowledge no response, add a new value angle, keep it shorter than email #1.";
   } else if (day === 7) {
     sequenceNote =
-      "\nThis is the final follow-up (day 7). The lead has not responded. Be brief, acknowledge it's your last note, make it easy to say no, and give a simple single CTA.";
+      "\n\nThis is the final follow-up (day 7). Be brief, acknowledge it's your last note, make it easy to say no, single CTA.";
+  } else {
+    sequenceNote = "";
   }
 
   return `You are an expert B2B sales copywriter. Write a personalized cold outreach email.
@@ -59,13 +74,12 @@ Return ONLY this JSON — no code fences, no extra text:
 
 export async function generateEmail(input: EmailGenInput): Promise<GeneratedEmail> {
   let raw = "{}";
-
   try {
     const completion = await groq.chat.completions.create({
-      model: "llama-3.3-70b-versatile",
-      messages: [{ role: "user", content: buildPrompt(input) }],
-      temperature: 0.7,
-      max_tokens: 1024,
+      model:           "llama-3.3-70b-versatile",
+      messages:        [{ role: "user", content: buildPrompt(input) }],
+      temperature:     0.7,
+      max_tokens:      1024,
       response_format: { type: "json_object" },
     });
     raw = completion.choices[0]?.message?.content ?? "{}";
@@ -86,13 +100,9 @@ export async function generateEmail(input: EmailGenInput): Promise<GeneratedEmai
     throw new Error("Generated email is missing subject or body");
   }
 
-  return {
-    subject: parsed.subject.trim(),
-    body: parsed.body.trim(),
-  };
+  return { subject: parsed.subject.trim(), body: parsed.body.trim() };
 }
 
-/** Convert plain-text body to minimal HTML paragraphs. */
 export function bodyToHtml(body: string, trackingPixelUrl: string): string {
   const paragraphs = body
     .split("\n\n")

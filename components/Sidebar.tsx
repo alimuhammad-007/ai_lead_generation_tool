@@ -51,20 +51,6 @@ function IconOutreach() {
     </svg>
   );
 }
-function IconClients() {
-  return (
-    <svg className="h-[18px] w-[18px] flex-shrink-0" fill="none" stroke="currentColor" strokeWidth={1.8} viewBox="0 0 24 24">
-      <path strokeLinecap="round" strokeLinejoin="round" d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0H5m14 0h2M5 21H3M9 7h1m-1 4h1m4-4h1m-1 4h1M9 21v-3a3 3 0 016 0v3" />
-    </svg>
-  );
-}
-function IconBilling() {
-  return (
-    <svg className="h-[18px] w-[18px] flex-shrink-0" fill="none" stroke="currentColor" strokeWidth={1.8} viewBox="0 0 24 24">
-      <path strokeLinecap="round" strokeLinejoin="round" d="M3 10h18M7 15h1m4 0h1m-7 4h12a3 3 0 003-3V8a3 3 0 00-3-3H6a3 3 0 00-3 3v8a3 3 0 003 3z" />
-    </svg>
-  );
-}
 function IconSignOut() {
   return (
     <svg className="h-4 w-4 flex-shrink-0" fill="none" stroke="currentColor" strokeWidth={1.8} viewBox="0 0 24 24">
@@ -90,16 +76,11 @@ function IconClose() {
 // ── Nav config ────────────────────────────────────────────────────────────────
 
 const NAV_MAIN = [
-  { href: "/",             label: "Overview",   icon: <IconOverview />,      exact: true  },
-  { href: "/prospecting",  label: "Find Leads", icon: <IconProspecting />,   exact: false },
-  { href: "/leads",        label: "Leads",      icon: <IconLeads />,         exact: false },
-  { href: "/import",   label: "Import",    icon: <IconImport />,   exact: false },
-  { href: "/outreach", label: "Outreach",  icon: <IconOutreach />, exact: false },
-  { href: "/clients",  label: "Clients",   icon: <IconClients />,  exact: false },
-] as const;
-
-const NAV_SETTINGS = [
-  { href: "/clients", label: "Billing", icon: <IconBilling />, exact: false },
+  { href: "/",            label: "Overview",   icon: <IconOverview />,    exact: true  },
+  { href: "/prospecting", label: "Find Leads", icon: <IconProspecting />, exact: false },
+  { href: "/leads",       label: "Leads",      icon: <IconLeads />,       exact: false },
+  { href: "/import",      label: "Import",     icon: <IconImport />,      exact: false },
+  { href: "/outreach",    label: "Outreach",   icon: <IconOutreach />,    exact: false },
 ] as const;
 
 // ── Component ─────────────────────────────────────────────────────────────────
@@ -189,23 +170,25 @@ export function Sidebar() {
           ))}
         </ul>
 
+        {/* ── Tools ── */}
         <p className="mb-2 mt-6 px-3 text-[10px] font-semibold uppercase tracking-widest text-slate-600">
-          Settings
+          Tools
         </p>
         <ul className="space-y-0.5">
-          {NAV_SETTINGS.map((item) => (
-            <li key={item.label}>
-              <Link
-                href={item.href}
-                onClick={() => setOpen(false)}
-                className={navLinkCls(item.href, item.exact)}
-                style={navLinkStyle(item.href, item.exact)}
+          <li>
+            <div className="flex items-center gap-2.5 rounded-lg px-3 py-2 text-xs text-slate-500">
+              <span
+                className="flex h-[18px] w-[18px] flex-shrink-0 items-center justify-center rounded text-[9px] font-black text-white"
+                style={{ backgroundColor: "#0A66C2" }}
               >
-                {item.icon}
-                {item.label}
-              </Link>
-            </li>
-          ))}
+                in
+              </span>
+              LinkedIn Messages
+              <span className="ml-auto rounded-full bg-indigo-950 px-1.5 py-0.5 text-[9px] font-semibold text-indigo-400">
+                AI
+              </span>
+            </div>
+          </li>
         </ul>
       </nav>
 
