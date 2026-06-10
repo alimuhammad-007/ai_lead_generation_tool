@@ -3,6 +3,7 @@ import { redirect } from "next/navigation";
 import { createServerSupabaseClient } from "@/lib/supabase-server";
 import { LeadsChart, type ChartDataPoint } from "@/components/LeadsChart";
 import { AlertBanner } from "@/components/AlertBanner";
+import { RunAgentsButton } from "@/components/RunAgentsButton";
 
 export const dynamic = "force-dynamic";
 
@@ -99,15 +100,18 @@ export default async function DashboardPage() {
           <h1 className="text-2xl font-bold tracking-tight text-slate-900">Dashboard</h1>
           <p className="mt-0.5 text-sm text-slate-500">{today}</p>
         </div>
-        <Link
-          href="/leads/new"
-          className="inline-flex items-center gap-2 rounded-xl bg-indigo-600 px-4 py-2.5 text-sm font-semibold text-white shadow-sm shadow-indigo-200 transition-all hover:bg-indigo-700 hover:shadow-md"
-        >
-          <svg className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" d="M12 4v16m8-8H4" />
-          </svg>
-          Add Lead
-        </Link>
+        <div className="flex items-center gap-3">
+          <RunAgentsButton />
+          <Link
+            href="/leads/new"
+            className="inline-flex items-center gap-2 rounded-xl bg-indigo-600 px-4 py-2.5 text-sm font-semibold text-white shadow-sm shadow-indigo-200 transition-all hover:bg-indigo-700 hover:shadow-md"
+          >
+            <svg className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" d="M12 4v16m8-8H4" />
+            </svg>
+            Add Lead
+          </Link>
+        </div>
       </div>
 
       {/* ── Stat cards ── */}
