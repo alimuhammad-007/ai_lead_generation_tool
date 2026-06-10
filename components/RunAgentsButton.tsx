@@ -43,8 +43,31 @@ type OutreachResult = {
   message?:         string;
 };
 
+type MeetingResult = {
+  processed:  number;
+  emailsSent: number;
+  skipped:    number;
+  meetingLink: string;
+  message?:   string;
+};
+
+type FollowUpResult = {
+  followed_up: number;
+  skipped:     number;
+  message?:    string;
+};
+
+type MonitorResult = {
+  found:    number;
+  imported: number;
+  hot:      number;
+  warm:     number;
+  cold:     number;
+  message?: string;
+};
+
 const STORAGE_KEY = "apex_agent_runs";
-const MAX_LOG     = 5;
+const MAX_LOG     = 8;
 
 // ── Helpers ────────────────────────────────────────────────────────────────────
 
@@ -65,15 +88,39 @@ function timeAgo(ts: number): string {
   return `${Math.floor(s / 3600)}h ago`;
 }
 
+// ── Dropdown item sub-component ───────────────────────────────────────────────
+
+function MenuItem({
+  emoji, bg, hover, label, desc, onClick,
+}: {
+  emoji: string; bg: string; hover: string;
+  label: string; desc: string; onClick: () => void;
+}) {
+  return (
+    <button
+      onClick={onClick}
+      className={`flex w-full items-start gap-3 px-4 py-3 text-left transition ${hover}`}
+    >
+      <span className={`mt-0.5 flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-lg ${bg} text-sm`}>
+        {emoji}
+      </span>
+      <div>
+        <p className="text-sm font-semibold text-slate-900">{label}</p>
+        <p className="mt-0.5 text-[11px] leading-snug text-slate-500">{desc}</p>
+      </div>
+    </button>
+  );
+}
+
 // ── Component ──────────────────────────────────────────────────────────────────
 
 export function RunAgentsButton() {
-  const [open,          setOpen]          = useState(false);
-  const [loading,       setLoading]       = useState<string | null>(null);
-  const [loadingLabel,  setLoadingLabel]  = useState<string>("");
-  const [toast,         setToast]         = useState<{ msg: string; ok: boolean } | null>(null);
-  const [log,           setLog]           = useState<AgentRun[]>([]);
-  const [showLog,       setShowLog]       = useState(false);
+  const [open,         setOpen]         = useState(false);
+  const [loading,      setLoading]      = useState<string | null>(null);
+  const [loadingLabel, setLoadingLabel] = useState<string>("");
+  const [toast,        setToast]        = useState<{ msg: string; ok: boolean } | null>(null);
+  const [log,          setLog]          = useState<AgentRun[]>([]);
+  const [showLog,      setShowLog]      = useState(false);
   const dropRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => { setLog(loadLog()); }, []);
@@ -102,31 +149,28 @@ export function RunAgentsButton() {
     });
   }
 
-  // ── Qualify All ─────────────────────────────────────────────────────────────
-  async function runQualify() {
+  // ── Generic agent runner helper ──────────────────────────────────────────────
+  async function runAgent<T>(opts: {
+    key:         string;
+    label:       string;
+    startLabel:  string;
+    fetch:       () => Promise<T>;
+    summarize:   (data: T) => string;
+  }) {
     setOpen(false);
-    setLoading("qualify");
-    setLoadingLabel("Qualifying leads…");
+    setLoading(opts.key);
+    setLoadingLabel(opts.startLabel);
     const runId = Date.now().toString();
-    pushLog({ id: runId, label: "Qualify All Unscored Leads", ts: Date.now(), status: "running", summary: "Running…" });
+    pushLog({ id: runId, label: opts.label, ts: Date.now(), status: "running", summary: opts.startLabel });
 
     try {
-      const res  = await fetch("/api/agents/qualify", {
-        method:  "POST",
-        headers: { "Content-Type": "application/json" },
-        body:    JSON.stringify({ runAll: true }),
-      });
-      const data: QualifyResult = await res.json();
-
-      const summary = data.message
-        ? data.message
-        : `Qualified ${data.qualified} lead(s): ${data.hot} hot, ${data.warm} warm, ${data.cold} cold. ${data.sequencesStarted} sequence(s) started.`;
-
-      pushLog({ id: runId, label: "Qualify All Unscored Leads", ts: Date.now(), status: "done", summary });
+      const data    = await opts.fetch();
+      const summary = opts.summarize(data);
+      pushLog({ id: runId, label: opts.label, ts: Date.now(), status: "done", summary });
       setToast({ msg: summary, ok: true });
     } catch (err) {
       const msg = err instanceof Error ? err.message : "Agent failed";
-      pushLog({ id: runId, label: "Qualify All Unscored Leads", ts: Date.now(), status: "error", summary: msg });
+      pushLog({ id: runId, label: opts.label, ts: Date.now(), status: "error", summary: msg });
       setToast({ msg, ok: false });
     } finally {
       setLoading(null);
@@ -134,93 +178,96 @@ export function RunAgentsButton() {
     }
   }
 
-  // ── Daily Report ─────────────────────────────────────────────────────────────
-  async function runDailyReport() {
-    setOpen(false);
-    setLoading("report");
-    setLoadingLabel("Generating report…");
-    const runId = Date.now().toString();
-    pushLog({ id: runId, label: "Send Daily Report", ts: Date.now(), status: "running", summary: "Generating…" });
+  // ── Agent runners ─────────────────────────────────────────────────────────────
 
-    try {
-      const res  = await fetch("/api/agents/daily-report");
-      const data: ReportResult = await res.json();
+  const runQualify = () => runAgent<QualifyResult>({
+    key:        "qualify",
+    label:      "Qualify All Unscored Leads",
+    startLabel: "Qualifying leads…",
+    fetch: () =>
+      fetch("/api/agents/qualify", {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ runAll: true }),
+      }).then((r) => r.json()),
+    summarize: (d) =>
+      d.message
+        ? d.message
+        : `Qualified ${d.qualified} lead(s): ${d.hot} hot, ${d.warm} warm, ${d.cold} cold. ${d.sequencesStarted} sequence(s) started.`,
+  });
 
-      const summary = data.emailSent
-        ? `Report sent to ${data.sentTo}. ${data.stats.newLeads} new leads, ${data.stats.emailsSent} emails, ${data.stats.replies} replies.`
-        : `Report generated (email not sent). ${data.stats.newLeads} new leads, ${data.stats.emailsSent} emails.`;
+  const runDailyReport = () => runAgent<ReportResult>({
+    key:        "report",
+    label:      "Send Daily Report",
+    startLabel: "Generating report…",
+    fetch: () => fetch("/api/agents/daily-report").then((r) => r.json()),
+    summarize: (d) =>
+      d.emailSent
+        ? `Report sent to ${d.sentTo}. ${d.stats.newLeads} new leads, ${d.stats.emailsSent} emails, ${d.stats.replies} replies.`
+        : `Report generated (email not sent). ${d.stats.newLeads} new leads, ${d.stats.emailsSent} emails.`,
+  });
 
-      pushLog({ id: runId, label: "Send Daily Report", ts: Date.now(), status: "done", summary });
-      setToast({ msg: summary, ok: true });
-    } catch (err) {
-      const msg = err instanceof Error ? err.message : "Agent failed";
-      pushLog({ id: runId, label: "Send Daily Report", ts: Date.now(), status: "error", summary: msg });
-      setToast({ msg, ok: false });
-    } finally {
-      setLoading(null);
-      setLoadingLabel("");
-    }
-  }
+  const runAutoOutreach = () => runAgent<OutreachResult>({
+    key:        "outreach",
+    label:      "Auto Outreach Hot Leads",
+    startLabel: "Reaching out to hot leads…",
+    fetch: () =>
+      fetch("/api/agents/auto-outreach", {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ runAll: true, channels: ["email", "linkedin", "whatsapp"] }),
+      }).then((r) => r.json()),
+    summarize: (d) =>
+      d.message
+        ? d.message
+        : `Reached ${d.processed} hot lead(s): ${d.emailsSent} email${d.emailsSent !== 1 ? "s" : ""}, ${d.linkedinMessages} LinkedIn, ${d.whatsAppMessages} WhatsApp.${d.skipped > 0 ? ` (${d.skipped} skipped)` : ""}`,
+  });
 
-  // ── Auto Outreach Hot Leads ───────────────────────────────────────────────────
-  async function runAutoOutreach() {
-    setOpen(false);
-    setLoading("outreach");
-    setLoadingLabel("Finding hot leads…");
-    const runId = Date.now().toString();
-    pushLog({ id: runId, label: "Auto Outreach Hot Leads", ts: Date.now(), status: "running", summary: "Starting…" });
+  const runMeetingBooker = () => runAgent<MeetingResult>({
+    key:        "meetings",
+    label:      "Book Meetings with Hot Leads",
+    startLabel: "Booking meetings…",
+    fetch: () =>
+      fetch("/api/agents/meeting-booker", {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ runAll: true }),
+      }).then((r) => r.json()),
+    summarize: (d) =>
+      d.message
+        ? d.message
+        : `Sent ${d.emailsSent} meeting request${d.emailsSent !== 1 ? "s" : ""} to hot leads.${d.skipped > 0 ? ` (${d.skipped} skipped — no email or contacted recently)` : ""}`,
+  });
 
-    try {
-      // Step 1 — fetch hot lead count so we can show "Reaching out to X hot leads..."
-      let hotCount = 0;
-      try {
-        const countRes  = await fetch("/api/agents/auto-outreach", {
-          method:  "POST",
-          headers: { "Content-Type": "application/json" },
-          // dry-run with runAll but channels=[] just to get the count
-          // Actually: just start the real run and update label mid-flight
-          body:    JSON.stringify({ runAll: true, channels: [], _countOnly: true }),
-        });
-        const countData = await countRes.json();
-        hotCount = (countData.processed ?? 0) + (countData.skipped ?? 0);
-      } catch { /* non-critical */ }
+  const runFollowUp = () => runAgent<FollowUpResult>({
+    key:        "followup",
+    label:      "Follow-up Unresponsive Leads",
+    startLabel: "Finding unresponsive leads…",
+    fetch: () =>
+      fetch("/api/agents/followup", {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ runAll: true }),
+      }).then((r) => r.json()),
+    summarize: (d) =>
+      d.message
+        ? d.message
+        : `Sent ${d.followed_up} follow-up email${d.followed_up !== 1 ? "s" : ""}.${d.skipped > 0 ? ` ${d.skipped} skipped.` : ""}`,
+  });
 
-      if (hotCount > 0) {
-        setLoadingLabel(`Reaching out to ${hotCount} hot lead${hotCount !== 1 ? "s" : ""}…`);
-      } else {
-        setLoadingLabel("Reaching out to hot leads…");
-      }
+  const runMonitor = () => runAgent<MonitorResult>({
+    key:        "monitor",
+    label:      "Find New Leads Automatically",
+    startLabel: "Scanning for new leads…",
+    fetch: () =>
+      fetch("/api/agents/monitor", {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ autoImport: true }),
+      }).then((r) => r.json()),
+    summarize: (d) =>
+      d.message
+        ? d.message
+        : `Found ${d.found} new lead${d.found !== 1 ? "s" : ""}, imported ${d.imported}: ${d.hot} hot, ${d.warm} warm, ${d.cold} cold.`,
+  });
 
-      // Step 2 — real run with all channels
-      const res  = await fetch("/api/agents/auto-outreach", {
-        method:  "POST",
-        headers: { "Content-Type": "application/json" },
-        body:    JSON.stringify({ runAll: true, channels: ["email", "linkedin", "whatsapp"] }),
-      });
-      const data: OutreachResult = await res.json();
-
-      const summary = data.message
-        ? data.message
-        : `Reached out to ${data.processed} hot lead(s): ${data.emailsSent} email${data.emailsSent !== 1 ? "s" : ""} sent, ${data.linkedinMessages} LinkedIn message${data.linkedinMessages !== 1 ? "s" : ""}, ${data.whatsAppMessages} WhatsApp message${data.whatsAppMessages !== 1 ? "s" : ""}.${data.skipped > 0 ? ` (${data.skipped} skipped — score < 50)` : ""}`;
-
-      pushLog({ id: runId, label: "Auto Outreach Hot Leads", ts: Date.now(), status: "done", summary });
-      setToast({ msg: summary, ok: true });
-    } catch (err) {
-      const msg = err instanceof Error ? err.message : "Agent failed";
-      pushLog({ id: runId, label: "Auto Outreach Hot Leads", ts: Date.now(), status: "error", summary: msg });
-      setToast({ msg, ok: false });
-    } finally {
-      setLoading(null);
-      setLoadingLabel("");
-    }
-  }
-
-  const isLoading = loading !== null;
-
-  // ── Loading label ────────────────────────────────────────────────────────────
-  const buttonLabel = isLoading
-    ? (loadingLabel || (loading === "qualify" ? "Qualifying…" : loading === "report" ? "Reporting…" : "Running outreach…"))
-    : "Run Agents";
+  const isLoading   = loading !== null;
+  const buttonLabel = isLoading ? (loadingLabel || "Running…") : "Run Agents";
 
   return (
     <div className="relative flex items-center gap-2">
@@ -283,7 +330,7 @@ export function RunAgentsButton() {
                 <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
                 <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
               </svg>
-              <span className="max-w-[160px] truncate">{buttonLabel}</span>
+              <span className="max-w-[180px] truncate">{buttonLabel}</span>
             </>
           ) : (
             <>
@@ -300,61 +347,60 @@ export function RunAgentsButton() {
 
         {open && (
           <div className="absolute right-0 top-12 z-50 w-72 overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-xl">
-            <div className="px-4 py-2.5 text-[11px] font-semibold uppercase tracking-wider text-slate-400">
-              Autonomous Agents
+
+            {/* ── Section 1: Lead management ── */}
+            <div className="px-4 pb-1 pt-2.5 text-[10px] font-semibold uppercase tracking-wider text-slate-400">
+              Lead Management
             </div>
 
-            {/* Option 1 — Qualify */}
-            <button
+            <MenuItem emoji="🎯" bg="bg-indigo-100" hover="hover:bg-indigo-50"
+              label="Qualify All Unscored Leads"
+              desc="AI-score + ICP + research. Auto-starts sequences for leads ≥ 70."
               onClick={runQualify}
-              className="flex w-full items-start gap-3 px-4 py-3 text-left transition hover:bg-indigo-50"
-            >
-              <span className="mt-0.5 flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-lg bg-indigo-100 text-sm">
-                🎯
-              </span>
-              <div>
-                <p className="text-sm font-semibold text-slate-900">Qualify All Unscored Leads</p>
-                <p className="mt-0.5 text-[11px] leading-snug text-slate-500">
-                  AI-score + ICP + research. Auto-starts sequences for leads ≥ 70.
-                </p>
-              </div>
-            </button>
-
+            />
             <div className="mx-4 border-t border-slate-100" />
+            <MenuItem emoji="🔍" bg="bg-emerald-100" hover="hover:bg-emerald-50"
+              label="Find New Leads Automatically"
+              desc="Scan Google for new ICP-matching leads and auto-import them."
+              onClick={runMonitor}
+            />
 
-            {/* Option 2 — Auto Outreach */}
-            <button
+            {/* ── Section 2: Outreach ── */}
+            <div className="mx-4 mt-1 border-t border-slate-200" />
+            <div className="px-4 pb-1 pt-2.5 text-[10px] font-semibold uppercase tracking-wider text-slate-400">
+              Outreach
+            </div>
+
+            <MenuItem emoji="🚀" bg="bg-rose-100" hover="hover:bg-rose-50"
+              label="Auto Outreach Hot Leads"
+              desc="Send email + LinkedIn + WhatsApp to all hot leads (score ≥ 50)."
               onClick={runAutoOutreach}
-              className="flex w-full items-start gap-3 px-4 py-3 text-left transition hover:bg-rose-50"
-            >
-              <span className="mt-0.5 flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-lg bg-rose-100 text-sm">
-                🚀
-              </span>
-              <div>
-                <p className="text-sm font-semibold text-slate-900">Auto Outreach Hot Leads</p>
-                <p className="mt-0.5 text-[11px] leading-snug text-slate-500">
-                  Send email, LinkedIn, and WhatsApp to all hot leads (score ≥ 50).
-                </p>
-              </div>
-            </button>
-
+            />
             <div className="mx-4 border-t border-slate-100" />
+            <MenuItem emoji="📅" bg="bg-sky-100" hover="hover:bg-sky-50"
+              label="Book Meetings with Hot Leads"
+              desc="Send personalized Calendly meeting requests to hot leads."
+              onClick={runMeetingBooker}
+            />
+            <div className="mx-4 border-t border-slate-100" />
+            <MenuItem emoji="🔄" bg="bg-amber-100" hover="hover:bg-amber-50"
+              label="Follow-up Unresponsive Leads"
+              desc="Re-engage leads with no reply 3+ days after first email."
+              onClick={runFollowUp}
+            />
 
-            {/* Option 3 — Daily Report */}
-            <button
+            {/* ── Section 3: Reporting ── */}
+            <div className="mx-4 mt-1 border-t border-slate-200" />
+            <div className="px-4 pb-1 pt-2.5 text-[10px] font-semibold uppercase tracking-wider text-slate-400">
+              Reporting
+            </div>
+
+            <MenuItem emoji="📊" bg="bg-violet-100" hover="hover:bg-violet-50"
+              label="Send Daily Report"
+              desc="Compile today's stats and send an AI-written summary email."
               onClick={runDailyReport}
-              className="flex w-full items-start gap-3 px-4 py-3 text-left transition hover:bg-violet-50"
-            >
-              <span className="mt-0.5 flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-lg bg-violet-100 text-sm">
-                📊
-              </span>
-              <div>
-                <p className="text-sm font-semibold text-slate-900">Send Daily Report</p>
-                <p className="mt-0.5 text-[11px] leading-snug text-slate-500">
-                  Compile today&apos;s stats and send an AI-written summary email.
-                </p>
-              </div>
-            </button>
+            />
+            <div className="h-1" />
           </div>
         )}
       </div>

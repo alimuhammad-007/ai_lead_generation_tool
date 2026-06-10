@@ -5,6 +5,7 @@ export const CLIENT_CONFIG = {
   logoLetter:     "A",
   industry:       "general",
   supportEmail:   "support@apexleadgen.com",
+  calendlyLink:   "https://calendly.com/your-link",
 
   // ── ICP Criteria ────────────────────────────────────────────────────────────
   icpCriteria: {
